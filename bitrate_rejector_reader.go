@@ -17,9 +17,10 @@ type BitrateRejectorReader struct {
 	reader         io.Reader
 	maxBitrateKbps uint32
 
-	readSize uint64
-	now      func() time.Time // for mock
-	last     time.Time
+	bitrateKbps float64
+	readSize    uint64
+	now         func() time.Time // for mock
+	last        time.Time
 }
 
 func NewBitrateRejectorReader(r io.Reader, maxBitrateKbps uint32) *BitrateRejectorReader {
@@ -32,34 +33,35 @@ func NewBitrateRejectorReader(r io.Reader, maxBitrateKbps uint32) *BitrateReject
 }
 
 func (r *BitrateRejectorReader) Read(b []byte) (int, error) {
-	n, err := r.reader.Read(b)
-	if err != nil {
-		return 0, err
-	}
-
+	// Check bitrate first
 	cur := r.now()
 	if r.last.IsZero() {
 		r.last = cur
 	}
 	diff := cur.Sub(r.last)
-	r.readSize += uint64(n)
-
 	if diff >= 1*time.Second {
-		bitrateKbps := (float64(r.readSize) / float64(diff/time.Second)) * 8 / 1024.0
+		r.bitrateKbps = (float64(r.readSize) / float64(diff/time.Second)) * 8 / 1024.0
 		// reset
 		r.readSize = 0
 		r.last = cur
 
-		if bitrateKbps > float64(r.maxBitrateKbps) {
+		if r.bitrateKbps > float64(r.maxBitrateKbps) {
 			return 0, errors.Errorf(
 				"Bitrate exceeded: Limit = %vkbps, Value = %vkbps",
 				r.maxBitrateKbps,
-				bitrateKbps,
+				r.bitrateKbps,
 			)
 		}
 	}
 
-	return n, err
+	n, err := r.reader.Read(b)
+	if err != nil {
+		return 0, err
+	}
+
+	r.readSize += uint64(n)
+
+	return n, nil
 }
 
 func (r *BitrateRejectorReader) Close() error {
@@ -68,4 +70,8 @@ func (r *BitrateRejectorReader) Close() error {
 	}
 
 	return nil
+}
+
+func (r *BitrateRejectorReader) BitrateKbps() float64 {
+	return r.bitrateKbps
 }

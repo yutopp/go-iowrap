@@ -23,20 +23,24 @@ func TestBitrateRejectorReaderRejected(t *testing.T) {
 		return time.Unix(0, 0)
 	}
 
-	// Read 1KB=8Kbits
-	buf := make([]byte, 1024)
+	buf := make([]byte, 1024*2)
+
+	// Read 2KB=16Kbits
 	n, err := r.Read(buf)
 	assert.Nil(t, err)
-	assert.Equal(t, 1024, n)
+	assert.Equal(t, 2048, n)
+	assert.InDelta(t, 0.0, r.BitrateKbps(), 0.01) // Not calculated yet
 
 	// simulate 1 sec
 	r.now = func() time.Time {
 		return time.Unix(1, 0)
 	}
 
+	// First read after 1s
 	// Read 8Kbits
-	n, err = r.Read(buf)
+	n, err = r.Read(buf[:1024])
 	assert.EqualError(t, err, "Bitrate exceeded: Limit = 8kbps, Value = 16kbps")
+	assert.InDelta(t, 16.0, r.BitrateKbps(), 0.01)
 }
 
 func TestBitrateRejectorReaderAccepted(t *testing.T) {
@@ -54,6 +58,11 @@ func TestBitrateRejectorReaderAccepted(t *testing.T) {
 		n, err := r.Read(buf)
 		assert.Nil(t, err)
 		assert.Equal(t, 512, n)
+		if i == 0 {
+			assert.InDelta(t, 0.0, r.BitrateKbps(), 0.01)
+		} else {
+			assert.InDelta(t, 4.0, r.BitrateKbps(), 0.01)
+		}
 
 		// simulate 1 sec per loop
 		r.now = func() time.Time {
