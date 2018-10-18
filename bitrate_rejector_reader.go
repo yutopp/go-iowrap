@@ -8,7 +8,6 @@
 package iowrap
 
 import (
-	"github.com/pkg/errors"
 	"io"
 	"time"
 )
@@ -46,11 +45,10 @@ func (r *BitrateRejectorReader) Read(b []byte) (int, error) {
 		r.last = cur
 
 		if r.bitrateKbps > float64(r.maxBitrateKbps) {
-			return 0, errors.Errorf(
-				"Bitrate exceeded: Limit = %vkbps, Value = %vkbps",
-				r.maxBitrateKbps,
-				r.bitrateKbps,
-			)
+			return 0, &BitrateExceededError{
+				MaxKbps:     float64(r.maxBitrateKbps),
+				CurrentKbps: r.bitrateKbps,
+			}
 		}
 	}
 
